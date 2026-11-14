@@ -1,9 +1,10 @@
 param([switch]$Build)
 
 # ---- Edit these three paths if yours differ ----
-$Zone    = "C:\Users\srina\IdeaProjects\dispatch-platform"
-$Rides   = "C:\Users\srina\IdeaProjects\ride-service"
-$Gateway = "C:\Users\srina\IdeaProjects\gateway"
+$Root    = Split-Path $PSScriptRoot -Parent
+$Zone    = Join-Path $Root "dispatch-platform"
+$Rides   = Join-Path $Root "ride-service"
+$Gateway = Join-Path $Root "gateway"
 # -------------------------------------------------
 
 function Find-Jar($dir) {
