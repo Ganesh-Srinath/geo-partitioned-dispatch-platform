@@ -1,6 +1,6 @@
 # Geo-Partitioned Distributed Dispatch Platform
 
-A ride-dispatch backend built to explore real distributed systems problems: sharding, concurrency control, replication, failover, event-driven workflows, and idempotency. Built with Java 17, Spring Boot, Kafka and Docker.
+A ride-dispatch backend built to explore real distributed systems problems: sharding, concurrency control, replication, failover, event-driven workflows, and idempotency. Built with Java 21, Spring Boot, Kafka and Docker.
 
 Riders request rides and drivers stream their locations. The cluster matches each rider with a nearby free driver, and never gives one driver to two riders, even with hundreds of concurrent requests and a server crashing.
 
