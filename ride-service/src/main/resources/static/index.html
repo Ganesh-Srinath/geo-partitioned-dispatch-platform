@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dispatch Platform: Live Cluster</title>
+    <style>
+        :root { --bg:#0f172a; --panel:#1e293b; --text:#e2e8f0; --muted:#94a3b8;
+                --green:#22c55e; --red:#ef4444; --orange:#f59e0b; --blue:#38bdf8; }
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+        header { padding:16px 20px; border-bottom:1px solid #334155; }
+        header h1 { margin:0; font-size:18px; }
+        header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+        main { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px; }
+        @media (max-width:800px) { main { grid-template-columns:1fr; } }
+        .panel { background:var(--panel); border-radius:10px; padding:14px; }
+        h2 { margin:0 0 10px; font-size:13px; color:var(--muted); font-weight:600;
+             text-transform:uppercase; letter-spacing:.04em; }
+        .servers { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .server { border-radius:8px; padding:10px; background:#0f172a; border-left:4px solid var(--green); }
+        .server.down { border-left-color:var(--red); opacity:.85; }
+        .server .name { font-size:13px; }
+        .server .role { font-size:12px; color:var(--muted); margin-top:2px; }
+        .stats { display:flex; gap:16px; margin:10px 0 14px; font-size:13px; }
+        .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; }
+        canvas { width:100%; height:auto; background:#0f172a; border-radius:8px; display:block; }
+        #feed { max-height:560px; overflow:auto; font-size:13px; }
+        .ev { padding:6px 8px; border-left:3px solid var(--muted); margin-bottom:4px;
+              background:#0f172a; border-radius:4px; }
+        .ev .t { font-weight:600; }
+        .RideRequested { border-color:var(--blue); }
+        .DriverMatched, .PaymentAuthorized { border-color:var(--green); }
+        .PaymentFailed, .RideCancelled { border-color:var(--red); }
+        .RideFailed { border-color:var(--orange); }
+        .RideCompleted { border-color:var(--muted); }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Geo-Partitioned Distributed Dispatch Platform</h1>
+    <p id="gw">Live cluster view</p>
+</header>
+<main>
+    <section class="panel">
+        <h2>Cluster</h2>
+        <div class="servers" id="servers"></div>
+        <div class="stats">
+            <span><span class="dot" style="background:var(--green)"></span>free <b id="nFree">0</b></span>
+            <span><span class="dot" style="background:var(--orange)"></span>busy <b id="nBusy">0</b></span>
+        </div>
+        <h2>City map</h2>
+        <canvas id="map" width="600" height="600"></canvas>
+    </section>
+    <section class="panel">
+        <h2>Live ride events</h2>
+        <div id="feed"></div>
+    </section>
+</main>
+<script>
+    const LAT_MIN = 12.8, LAT_MAX = 13.2, LNG_MIN = 77.5, LNG_MAX = 77.7;
+    const canvas = document.getElementById('map');
+    const ctx = canvas.getContext('2d');
+
+    function pos(lat, lng) {
+      return [
+        (lng - LNG_MIN) / (LNG_MAX - LNG_MIN) * canvas.width,
+        (LAT_MAX - lat) / (LAT_MAX - LAT_MIN) * canvas.height
+      ];
+    }
+
+    function drawMap(drivers) {
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      // zone grid, one line every 0.1 degrees
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      for (let lat = 12.8; lat <= 13.2001; lat += 0.1) {
+        const y = pos(lat, LNG_MIN)[1];
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+      for (let lng = 77.5; lng <= 77.7001; lng += 0.1) {
+        const x = pos(LAT_MIN, lng)[0];
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+      // the line that splits the city between the two zone servers
+      const sy = pos(13.0, LNG_MIN)[1];
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(w, sy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '12px system-ui';
+      ctx.fillText('north server', 8, sy - 8);
+      ctx.fillText('south server', 8, sy + 18);
+      // drivers
+      for (const d of drivers) {
+        const p = pos(d.lat, d.lng);
+        ctx.fillStyle = d.free ? '#22c55e' : '#f59e0b';
+        ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch('/api/cluster');
+        const data = await res.json();
+        document.getElementById('gw').textContent =
+          data.gatewayUp ? 'Gateway up, live cluster view' : 'Gateway unreachable';
+        document.getElementById('servers').innerHTML = data.servers.map(s =>
+          '<div class="server ' + (s.up ? '' : 'down') + '">' +
+          '<div class="name">' + s.name + '</div>' +
+          '<div class="role">' + (s.up ? s.role : 'DOWN') + '</div></div>').join('');
+        const free = data.drivers.filter(d => d.free).length;
+        document.getElementById('nFree').textContent = free;
+        document.getElementById('nBusy').textContent = data.drivers.length - free;
+        drawMap(data.drivers);
+      } catch (e) {
+        document.getElementById('gw').textContent = 'Dashboard cannot reach ride-service';
+      }
+    }
+    setInterval(refresh, 1000);
+    refresh();
+
+    const feed = document.getElementById('feed');
+    const source = new EventSource('/api/events');
+    source.onmessage = (m) => {
+      let e;
+      try { e = JSON.parse(m.data); } catch (x) { return; }
+      const row = document.createElement('div');
+      row.className = 'ev ' + e.type;
+      const type = document.createElement('span');
+      type.className = 't';
+      type.textContent = e.type;
+      const rest = document.createElement('span');
+      rest.style.color = 'var(--muted)';
+      const who = [e.rideId, e.driverId].filter(Boolean).join(' / ');
+      rest.textContent = ' ' + who + (e.detail ? ' - ' + e.detail : '');
+      row.append(type, rest);
+      feed.prepend(row);
+      while (feed.children.length > 40) feed.removeChild(feed.lastChild);
+    };
+</script>
+</body>
+</html>
