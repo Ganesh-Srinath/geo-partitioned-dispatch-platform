@@ -2,7 +2,7 @@
 
 # 
 
-# A ride-dispatch backend built to explore real distributed systems problems: sharding, concurrency control, replication, failover, event-driven workflows, and idempotency. Built with Java 17, Spring Boot, Kafka and Docker.
+# A ride-dispatch backend built to explore real distributed systems problems: sharding, concurrency control, replication, failover, event-driven workflows, and idempotency. Built with Java 21, Spring Boot, Kafka and Docker.
 
 # 
 
